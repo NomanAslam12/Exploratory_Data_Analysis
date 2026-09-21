@@ -1,0 +1,157 @@
+/*
+=====================================================================
+Findings 
+=====================================================================
+*/
+USE DataWarehouse;
+
+-- 1) Date range and span
+SELECT
+	MIN(order_date) AS first_order_date,
+	MAX(order_date) AS last_order_date,
+	DATEDIFF(month, MIN(order_date), MAX(order_date)) AS months_covered
+FROM gold.fact_sales
+WHERE order_date IS NOT NULL;
+
+
+-- 2) Sales by year with year-over-year change
+SELECT
+	YEAR(order_date) AS order_year,
+	SUM(sales_amount) AS total_sales,
+	COUNT(DISTINCT order_number) AS total_orders,
+	COUNT(DISTINCT customer_key) AS total_customers,
+	COUNT(DISTINCT DATETRUNC(month, order_date)) AS months_with_sales,
+	CAST(ROUND(100.0 * (SUM(sales_amount) - LAG(SUM(sales_amount)) OVER (ORDER BY YEAR(order_date)))
+		/ NULLIF(LAG(SUM(sales_amount)) OVER (ORDER BY YEAR(order_date)), 0), 1) AS DECIMAL(18,2)) AS yoy_pct
+FROM gold.fact_sales
+WHERE order_date IS NOT NULL
+GROUP BY YEAR(order_date)
+ORDER BY order_year;
+
+
+-- 3) Three best and three worst months by sales
+SELECT TOP 3 'Best' AS ranking, DATETRUNC(month, order_date) AS order_month, SUM(sales_amount) AS total_sales
+FROM gold.fact_sales
+WHERE order_date IS NOT NULL
+GROUP BY DATETRUNC(month, order_date)
+ORDER BY total_sales DESC;
+
+SELECT TOP 3 'Worst' AS ranking, DATETRUNC(month, order_date) AS order_month, SUM(sales_amount) AS total_sales
+FROM gold.fact_sales
+WHERE order_date IS NOT NULL
+GROUP BY DATETRUNC(month, order_date)
+ORDER BY total_sales ASC;
+
+
+-- 4) Category share of revenue and units
+SELECT
+	p.category,
+	SUM(s.sales_amount) AS total_sales,
+	CAST(ROUND(100.0 * SUM(s.sales_amount) / SUM(SUM(s.sales_amount)) OVER (), 2) AS DECIMAL(18,2)) AS pct_of_sales,
+	SUM(s.quantity) AS total_quantity,
+	CAST(ROUND(100.0 * SUM(s.quantity) / SUM(SUM(s.quantity)) OVER (), 2) AS DECIMAL(18,2)) AS pct_of_units
+FROM gold.fact_sales s
+LEFT JOIN gold.dim_products p ON p.product_key = s.product_key
+WHERE s.order_date IS NOT NULL
+GROUP BY p.category
+ORDER BY total_sales DESC;
+
+
+-- 5) Top 5 and bottom 5 products by revenue, with share of total
+WITH product_sales AS (
+	SELECT
+		p.product_name,
+		p.category,
+		SUM(s.sales_amount) AS total_sales
+	FROM gold.fact_sales s
+	LEFT JOIN gold.dim_products p ON p.product_key = s.product_key
+	WHERE s.order_date IS NOT NULL
+	GROUP BY p.product_name, p.category
+),
+ranked AS (
+	SELECT *,
+		ROW_NUMBER() OVER (ORDER BY total_sales DESC) AS rn_top,
+		ROW_NUMBER() OVER (ORDER BY total_sales ASC)  AS rn_bottom,
+		CAST(ROUND(100.0 * total_sales / SUM(total_sales) OVER (), 2) AS DECIMAL(18,2)) AS pct_of_sales
+	FROM product_sales
+)
+SELECT 'Top' AS ranking, product_name, category, total_sales, pct_of_sales FROM ranked WHERE rn_top <= 5
+UNION ALL
+SELECT 'Bottom', product_name, category, total_sales, pct_of_sales FROM ranked WHERE rn_bottom <= 5
+ORDER BY ranking DESC, total_sales DESC;
+
+
+-- 6) Customer segments: count and revenue share
+WITH customer_spending AS (
+	SELECT
+		customer_key,
+		SUM(sales_amount) AS total_spending,
+		DATEDIFF(month, MIN(order_date), MAX(order_date)) AS life_span
+	FROM gold.fact_sales
+	WHERE order_date IS NOT NULL
+	GROUP BY customer_key
+),
+segmented AS (
+	SELECT *,
+		CASE
+			WHEN life_span >= 12 AND total_spending > 5000  THEN 'VIP'
+			WHEN life_span >= 12 AND total_spending <= 5000 THEN 'Regular'
+			ELSE 'New'
+		END AS customer_segment
+	FROM customer_spending
+)
+SELECT
+	customer_segment,
+	COUNT(*) AS total_customers,
+	CAST(ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS decimal(18,2))  AS pct_of_customers,
+	SUM(total_spending) AS total_sales,
+	CAST(ROUND(100.0 * SUM(total_spending) / SUM(SUM(total_spending)) OVER (), 2) AS decimal(18,2)) AS pct_of_sales
+FROM segmented
+GROUP BY customer_segment
+ORDER BY total_sales DESC;
+
+
+-- 7) Revenue concentration: share of sales from the top 10% of customers
+WITH customer_totals AS (
+	SELECT customer_key, SUM(sales_amount) AS total_spending
+	FROM gold.fact_sales
+	WHERE order_date IS NOT NULL
+	GROUP BY customer_key
+),
+deciles AS (
+	SELECT *, NTILE(10) OVER (ORDER BY total_spending DESC) AS decile
+	FROM customer_totals
+)
+SELECT
+	decile,
+	COUNT(*) AS customers,
+	SUM(total_spending) AS total_sales,
+	CAST(ROUND(100.0 * SUM(total_spending) / SUM(SUM(total_spending)) OVER (), 2) AS DECIMAL(18,2)) AS pct_of_sales
+FROM deciles
+GROUP BY decile
+ORDER BY decile;
+
+
+-- 8) Sales by country
+SELECT
+	c.country,
+	COUNT(DISTINCT s.customer_key) AS customers,
+	COUNT(DISTINCT s.order_number) AS orders,
+	SUM(s.sales_amount) AS total_sales,
+	CAST(ROUND(100.0 * SUM(s.sales_amount) / SUM(SUM(s.sales_amount)) OVER (), 2) AS Decimal(18,2)) AS pct_of_sales
+FROM gold.fact_sales s
+LEFT JOIN gold.dim_customers c ON c.customer_key = s.customer_key
+WHERE s.order_date IS NOT NULL
+GROUP BY c.country
+ORDER BY total_sales DESC;
+
+
+-- 9) Order value and repeat behaviour
+SELECT
+    COUNT(DISTINCT order_number) AS total_orders,
+    COUNT(DISTINCT customer_key) AS ordering_customers,
+    CAST(ROUND(SUM(sales_amount) * 1.0 / COUNT(DISTINCT order_number), 2) AS DECIMAL(18,2)) AS avg_order_value,
+    CAST(ROUND(COUNT(DISTINCT order_number) * 1.0 / COUNT(DISTINCT customer_key), 2) AS DECIMAL(18,2)) AS orders_per_customer,
+    CAST(ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT order_number), 2) AS DECIMAL(18,2)) AS lines_per_order
+FROM gold.fact_sales
+WHERE order_date IS NOT NULL;
