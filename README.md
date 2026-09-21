@@ -26,9 +26,59 @@ Taken from `Measure_exploration.sql`:
 | Order lines | 60,398 |
 | Distinct orders | 27,659 |
 | Products | 295 |
-| Customers | 18,484 |
+| Customers in `dim_customers` | 18,484 |
 
 The gap between order lines (60,398) and distinct orders (27,659) is why order counts in this project use `COUNT(DISTINCT order_number)` and not `COUNT(*)`.
+
+## Findings
+
+The figures below come from `findings.sql`. That script filters out rows with no `order_date`. Two orders have no date, worth 4,992 in sales, so the totals here add up to 29,351,258 and not the 29,356,250 in the headline table.
+
+### Time span and growth
+
+Orders run from 29 December 2010 to 28 January 2014. Only 2011, 2012 and 2013 are complete years. 2010 has 14 orders from its last days, and 2014 has 871 orders from January, so their year-over-year percentages (+16,194.9% and -99.7%) come from partial periods and mean nothing.
+
+| Year | Sales | Orders | Customers who ordered | Average order value |
+|---|---|---|---|---|
+| 2011 | 7,075,088 | 2,216 | 2,216 | 3,193 |
+| 2012 | 5,842,231 | 3,269 | 3,255 | 1,787 |
+| 2013 | 16,344,878 | 21,287 | 17,427 | 768 |
+
+Sales fell 17.4% in 2012 and rose 179.8% in 2013. The 2013 growth came from volume, not larger orders. Orders grew 6.5 times and customers who ordered grew 5.4 times, while average order value fell from 1,787 to 768. The three best months are December, November and October 2013 (1,874,128, 1,780,688 and 1,673,261). With three full years and growth this steep, the data cannot separate seasonality from the trend. The weakest full month is May 2012, at 358,866.
+
+### Categories and products
+
+Bikes bring in 96.46% of revenue (28,311,657) but only 25.17% of units sold. Accessories are 59.76% of units and 2.38% of revenue (699,909). Clothing is 15.07% of units and 1.16% of revenue (339,692).
+
+The five best-selling products are all Mountain-200 variants, each between 4.40% and 4.68% of sales, and together 6,667,244 or 22.7% of revenue. The five lowest are accessories and clothing, all under 0.03% of sales each: Touring Tire Tube (7,435), Bike Wash - Dissolver (7,272), Patch Kit/8 Patches (6,378), Racing Socks- M (2,682) and Racing Socks- L (2,430). Products here are colour and size variants, so one model line can fill several ranking slots.
+
+### Customers
+
+27,657 orders came from 18,482 customers: an average order value of 1,061.26, 1.50 orders per customer and 2.18 lines per order.
+
+Revenue is concentrated. The top 10% of customers (1,849) account for 40.28% of sales, the top 20% for 66.41%, and the bottom 50% together for 1.94%.
+
+| Segment | Customers | Share of customers | Sales | Share of sales |
+|---|---|---|---|---|
+| New | 14,629 | 79.15% | 11,086,797 | 37.77% |
+| VIP | 1,653 | 8.94% | 10,760,470 | 36.66% |
+| Regular | 2,200 | 11.90% | 7,503,991 | 25.57% |
+
+New is the largest segment because 17,427 customers ordered in 2013, and the data ends in January 2014. Most customers had less than 12 months of history by construction, so the label reflects tenure inside the data window and not low value. New customers generate more revenue than VIP customers.
+
+### Countries
+
+| Country | Customers | Orders | Sales | Share of sales |
+|---|---|---|---|---|
+| United States | 7,481 | 9,229 | 9,162,225 | 31.22% |
+| Australia | 3,591 | 6,718 | 9,060,145 | 30.87% |
+| United Kingdom | 1,913 | 3,031 | 3,389,046 | 11.55% |
+| Germany | 1,780 | 2,484 | 2,894,066 | 9.86% |
+| France | 1,809 | 2,483 | 2,641,223 | 9.00% |
+| Canada | 1,571 | 3,375 | 1,977,733 | 6.74% |
+| n/a | 337 | 337 | 226,820 | 0.77% |
+
+Australia matches the United States in revenue with less than half the customers: 2,523 sales per customer against 1,225. 337 customers have no country in `dim_customers`.
 
 ## Scripts
 
@@ -48,6 +98,7 @@ The files follow the order of a typical EDA: profile the data, look at it over t
 | `Reporting.sql` | Customers split into VIP, Regular and New, with a count per segment |
 | `final_customer_report_view.sql` | Creates `gold.report_customers` |
 | `final_product_report_view.sql` | Creates `gold.report_products` |
+| `findings.sql` | Produces the figures in the Findings section above |
 
 ## Reporting views
 
