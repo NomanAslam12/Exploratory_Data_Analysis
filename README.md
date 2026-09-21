@@ -2,7 +2,7 @@
 
 An exploratory analysis of a sales data warehouse in T-SQL (SQL Server). The scripts start with basic profiling of the tables, move through time-series, ranking and segmentation queries, and finish with two reporting views that package customer and product metrics for BI tools.
 
-I built this by following the SQL course project from Data with Baraa, and wrote and ran the queries myself against the `DataWarehouse` database.
+I built this by following the SQL course project from Data with Baraa, and wrote and ran the queries myself against the `DataWarehouse` database. That database comes from my earlier project, [sql-data-warehouse-project](https://github.com/NomanAslam12/sql-data-warehouse-project), where I built the Bronze, Silver and Gold layers from CRM and ERP CSV exports. This repo is the analysis that sits on top of its Gold views.
 
 ## Data model
 
@@ -63,7 +63,7 @@ Aggregates with `GROUP BY`, `LEFT JOIN`, CTEs, subqueries, `CASE` segmentation, 
 
 ## Running it
 
-1. Restore or create the `DataWarehouse` database with the `gold` schema.
+1. Build the `DataWarehouse` database and its `gold` views by following the steps in [sql-data-warehouse-project](https://github.com/NomanAslam12/sql-data-warehouse-project).
 2. Run the scripts in any order; each one is standalone. Run the two view scripts last, and run each `CREATE VIEW` only once.
 3. `DATETRUNC` requires SQL Server 2022 or later.
 
